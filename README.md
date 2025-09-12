@@ -1,4 +1,4 @@
-# AMI Lineage Governance Framework - Complete Solution
+# AMI Lineage Governance Framework
 
 This comprehensive solution implements AMI lineage tracking and governance across AWS Organizations using Neptune graph database, Lambda functions, AWS Config, Security Hub, and Service Control Policies.
 
