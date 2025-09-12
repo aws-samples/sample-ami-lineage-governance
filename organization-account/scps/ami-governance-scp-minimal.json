@@ -1,0 +1,30 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowAllForTesting",
+      "Effect": "Allow",
+      "Action": "*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyNonApprovedAMIUsage",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:RunInstances"
+      ],
+      "Resource": "arn:aws:ec2:*:*:image/*",
+      "Condition": {
+        "StringNotEquals": {
+          "ec2:ImageTag/Approval": "Approved"
+        },
+        "StringNotEquals": {
+          "ec2:Owner": [
+            "amazon",
+            "aws-marketplace"
+          ]
+        }
+      }
+    }
+  ]
+}

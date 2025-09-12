@@ -1,0 +1,81 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyNonApprovedAMIUsage",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:RunInstances"
+      ],
+      "Resource": "arn:aws:ec2:*:*:image/*",
+      "Condition": {
+        "StringNotEquals": {
+          "ec2:ImageTag/Approval": "Approved"
+        }
+      }
+    },
+    {
+      "Sid": "RequireAMITagsOnCreation",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:CreateImage",
+        "ec2:CopyImage"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "aws:RequestedRegion": "false"
+        },
+        "ForAllValues:StringNotLike": {
+          "aws:TagKeys": [
+            "Creator",
+            "Source",
+            "ApprovalStatus",
+            "Environment"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "AllowMarketplaceAMIs",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:RunInstances"
+      ],
+      "Resource": "arn:aws:ec2:*::image/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:Owner": [
+            "amazon",
+            "aws-marketplace"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "AllowEmergencyAccess",
+      "Effect": "Allow",
+      "Action": "*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalTag/EmergencyAccess": "true"
+        }
+      }
+    },
+    {
+      "Sid": "AllowServiceRoles",
+      "Effect": "Allow",
+      "Action": "*",
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "aws:userid": [
+            "*:AMI-Lineage-*",
+            "AIDAI*"
+          ]
+        }
+      }
+    }
+  ]
+}
