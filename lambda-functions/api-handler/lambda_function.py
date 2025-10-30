@@ -3,6 +3,7 @@ import boto3
 import os
 import logging
 import traceback
+import re
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from gremlin_python.driver import client
@@ -89,11 +90,14 @@ def lambda_handler(event, context):
     path_parameters = event.get('pathParameters') or {}
     query_parameters = event.get('queryStringParameters') or {}
     body = event.get('body')
+
+    safe_path = re.sub(r'[\r\n\t]', '', str(path)[:100])
+    safe_method = re.sub(r'[\r\n\t]', '', str(http_method)[:10])
     
     logger.info("Processing API request", extra={
         'correlation_id': correlation_id,
-        'http_method': http_method,
-        'api_path': path
+        'http_method': safe_method,
+        'api_path': safe_path
     })
     
     try:
