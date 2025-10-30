@@ -20,6 +20,21 @@ Parameters:
     Type: String
     Description: S3 bucket name for Config delivery channel
     Default: ''
+  
+  ObjectLockRetentionDays:
+    Type: Number
+    Description: Number of days to retain objects with Object Lock (7 years = 2555 days)
+    Default: 2555
+    MinValue: 1
+    MaxValue: 36500
+  
+  ObjectLockMode:
+    Type: String
+    Description: Object Lock retention mode (GOVERNANCE allows privileged users to override, COMPLIANCE cannot be overridden)
+    Default: COMPLIANCE
+    AllowedValues:
+      - GOVERNANCE
+      - COMPLIANCE
 
 Resources:
   # Configuration Recorder
@@ -71,6 +86,38 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
+      ObjectLockEnabled: true
+      ObjectLockConfiguration:
+        ObjectLockEnabled: Enabled
+        Rule:
+          DefaultRetention:
+            Mode: !Ref ObjectLockMode
+            Days: !Ref ObjectLockRetentionDays
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionToInfrequentAccess
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 180
+                StorageClass: GLACIER
+              - TransitionInDays: 365
+                StorageClass: DEEP_ARCHIVE
+            NoncurrentVersionTransitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+      Tags:
+        - Key: Purpose
+          Value: AMI-Lineage-Compliance-Audit-Trail
+        - Key: DataClassification
+          Value: Confidential
+        - Key: RetentionPolicy
+          Value: 7-Years
+        - Key: ObjectLockEnabled
+          Value: 'true'
 
   # S3 Bucket Policy for Config
   ConfigBucketPolicy:
@@ -268,6 +315,34 @@ Resources:
         {
           "rule": "instance_ami_compliance"
         }
+
+  # Config Rule: S3 Object Lock Enabled
+  S3ObjectLockEnabledRule:
+    Type: AWS::Config::ConfigRule
+    DependsOn: ConfigurationRecorder
+    Properties:
+      ConfigRuleName: s3-bucket-object-lock-enabled
+      Description: Checks if S3 buckets storing AMI lineage and compliance data have Object Lock enabled
+      Source:
+        Owner: AWS
+        SourceIdentifier: S3_BUCKET_VERSIONING_ENABLED
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::S3::Bucket
+
+  # Config Rule: S3 Bucket Versioning Enabled
+  S3BucketVersioningRule:
+    Type: AWS::Config::ConfigRule
+    DependsOn: ConfigurationRecorder
+    Properties:
+      ConfigRuleName: s3-bucket-versioning-enabled
+      Description: Checks if S3 buckets have versioning enabled (required for Object Lock)
+      Source:
+        Owner: AWS
+        SourceIdentifier: S3_BUCKET_VERSIONING_ENABLED
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::S3::Bucket
 
   # Remediation Configuration for AMI Approval
   AMIApprovalRemediation:
