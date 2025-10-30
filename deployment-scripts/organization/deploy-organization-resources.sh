@@ -3,7 +3,7 @@
 # AMI Lineage Governance - Organization Account Deployment Script
 # This script deploys resources to the AWS Organizations management account
 
-set -e
+set -euo pipefail
 
 # Configuration
 ORGANIZATION_ACCOUNT_ID=""
