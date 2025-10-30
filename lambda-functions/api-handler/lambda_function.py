@@ -351,16 +351,119 @@ def get_ami_security_context(g, ami_id: str, include_compliance: bool = False, c
         })
         raise
 
-def validate_ami_source(ami_id: str, ami_info: Dict) -> Dict:
+def validate_ami_source(ami_id: str, ami_info: Dict, correlation_id: str = None) -> Dict:
     """
-    Validate AMI source and authenticity
+    Validate AMI source and authenticity with comprehensive error handling
     """
     try:
-        # Get AMI details from EC2 API
-        response = ec2_client.describe_images(ImageIds=[ami_id])
+        # Validate AMI ID format
+        if not ami_id or not re.match(r'^ami-[a-f0-9]{8,17}$', ami_id):
+            logger.warning(f"Invalid AMI ID format: {ami_id}", extra={
+                'ami_id': ami_id,
+                'correlation_id': correlation_id
+            })
+            return {
+                'marketplace_verified': False,
+                'trusted_account': False,
+                'approval_status': 'INVALID_AMI_ID',
+                'error': 'Invalid AMI ID format'
+            }
         
-        if not response['Images']:
-            return {'marketplace_verified': False, 'trusted_account': False, 'approval_status': 'UNKNOWN'}
+        # Get AMI details from EC2 API with error handling
+        try:
+            response = ec2_client.describe_images(ImageIds=[ami_id])
+        except ec2_client.exceptions.ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            
+            if error_code == 'InvalidAMIID.NotFound':
+                logger.warning(f"AMI not found: {ami_id}", extra={
+                    'ami_id': ami_id,
+                    'correlation_id': correlation_id,
+                    'error_code': error_code
+                })
+                return {
+                    'marketplace_verified': False,
+                    'trusted_account': False,
+                    'approval_status': 'AMI_NOT_FOUND',
+                    'error': 'AMI does not exist'
+                }
+            elif error_code == 'InvalidAMIID.Malformed':
+                logger.warning(f"Malformed AMI ID: {ami_id}", extra={
+                    'ami_id': ami_id,
+                    'correlation_id': correlation_id,
+                    'error_code': error_code
+                })
+                return {
+                    'marketplace_verified': False,
+                    'trusted_account': False,
+                    'approval_status': 'MALFORMED_AMI_ID',
+                    'error': 'Malformed AMI ID'
+                }
+            elif error_code in ['UnauthorizedOperation', 'AccessDenied']:
+                logger.error(f"Permission denied accessing AMI: {ami_id}", extra={
+                    'ami_id': ami_id,
+                    'correlation_id': correlation_id,
+                    'error_code': error_code,
+                    'error_message': error_message
+                })
+                return {
+                    'marketplace_verified': False,
+                    'trusted_account': False,
+                    'approval_status': 'PERMISSION_DENIED',
+                    'error': 'Insufficient permissions to access AMI'
+                }
+            elif error_code == 'RequestLimitExceeded':
+                logger.error(f"API rate limit exceeded for AMI: {ami_id}", extra={
+                    'ami_id': ami_id,
+                    'correlation_id': correlation_id,
+                    'error_code': error_code
+                })
+                return {
+                    'marketplace_verified': False,
+                    'trusted_account': False,
+                    'approval_status': 'RATE_LIMIT_EXCEEDED',
+                    'error': 'AWS API rate limit exceeded'
+                }
+            else:
+                logger.error(f"AWS API error validating AMI source: {error_code} - {error_message}", extra={
+                    'ami_id': ami_id,
+                    'correlation_id': correlation_id,
+                    'error_code': error_code,
+                    'error_message': error_message
+                })
+                return {
+                    'marketplace_verified': False,
+                    'trusted_account': False,
+                    'approval_status': 'API_ERROR',
+                    'error': f'AWS API error: {error_code}'
+                }
+        except Exception as e:
+            logger.error(f"Unexpected error calling EC2 API: {str(e)}", extra={
+                'ami_id': ami_id,
+                'correlation_id': correlation_id,
+                'exception_type': type(e).__name__,
+                'traceback': traceback.format_exc()
+            })
+            return {
+                'marketplace_verified': False,
+                'trusted_account': False,
+                'approval_status': 'UNEXPECTED_ERROR',
+                'error': 'Unexpected error accessing EC2 API'
+            }
+        
+        # Check if AMI exists in response
+        if not response.get('Images'):
+            logger.warning(f"AMI not found in response: {ami_id}", extra={
+                'ami_id': ami_id,
+                'correlation_id': correlation_id
+            })
+            return {
+                'marketplace_verified': False,
+                'trusted_account': False,
+                'approval_status': 'AMI_NOT_FOUND',
+                'error': 'AMI not found'
+            }
         
         ami_details = response['Images'][0]
         owner_id = ami_details.get('OwnerId', '')
@@ -377,6 +480,14 @@ def validate_ami_source(ami_id: str, ami_info: Dict) -> Dict:
         if ami_info and 'approval_status' in ami_info:
             approval_status = ami_info['approval_status'][0] if isinstance(ami_info['approval_status'], list) else ami_info['approval_status']
         
+        logger.info(f"Successfully validated AMI source: {ami_id}", extra={
+            'ami_id': ami_id,
+            'correlation_id': correlation_id,
+            'owner_id': owner_id,
+            'marketplace_verified': marketplace_verified,
+            'trusted_account': trusted_account
+        })
+        
         return {
             'marketplace_verified': marketplace_verified,
             'trusted_account': trusted_account,
@@ -385,8 +496,18 @@ def validate_ami_source(ami_id: str, ami_info: Dict) -> Dict:
         }
     
     except Exception as e:
-        logger.error(f"Error validating AMI source: {str(e)}")
-        return {'marketplace_verified': False, 'trusted_account': False, 'approval_status': 'ERROR'}
+        logger.error(f"Unexpected error validating AMI source: {str(e)}", extra={
+            'ami_id': ami_id,
+            'correlation_id': correlation_id,
+            'exception_type': type(e).__name__,
+            'traceback': traceback.format_exc()
+        })
+        return {
+            'marketplace_verified': False,
+            'trusted_account': False,
+            'approval_status': 'ERROR',
+            'error': 'Unexpected validation error'
+        }
 
 def get_ami_compliance_status(g, ami_id: str, ami_info: Dict) -> Dict:
     """
