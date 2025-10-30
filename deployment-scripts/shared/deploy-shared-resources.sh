@@ -3,7 +3,7 @@
 # AMI Lineage Governance - Shared Resources Deployment Script
 # This script deploys shared resources to the Security Tooling Account
 
-set -e
+set -euo pipefail
 
 # Configuration
 SECURITY_TOOLING_ACCOUNT_ID=""
