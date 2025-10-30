@@ -3,7 +3,7 @@
 # AMI Lineage Governance - Child Account Deployment Script
 # This script deploys resources to AWS member accounts
 
-set -e
+set -euo pipefail
 
 # Configuration
 SECURITY_TOOLING_ACCOUNT_ID=""
